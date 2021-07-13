@@ -21,7 +21,7 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 
 
 def flip_h(data):
-    data = np.flip(data, axis=2)
+    data = np.flip(data, axis=2)  #翻转data
 
     for fr in range(data.shape[0]):
         ang = data[fr,2,:,:]
@@ -46,10 +46,10 @@ class TrainModel:
 
     def __init__(self, data_path, train_prop, with_augmentation, dropout_ratio=0):
         self.data_path = data_path
-        self.input_files = [f for f in os.listdir(data_path) if re.search('npz', f)]
+        self.input_files = [f for f in os.listdir(data_path) if re.search('npz', f)] #f名字中有npz
         shuffle(self.input_files)
         self.train_prop = train_prop
-        self.with_augmentation = with_augmentation
+        self.with_augmentation = with_augmentation #数据增强
         self.dropout_ratio = dropout_ratio
 
     def __enter__(self):
@@ -62,11 +62,11 @@ class TrainModel:
     def __del__(self):
         self.sess.close()
 
-
+    #预测加求损失
     def _loss(self, img, label, weight, angle_label, prior):
         logits, last_relu, angle_pred = unet.create_unet2(NUM_LAYERS, NUM_FILTERS, img, self.is_train, prev=prior, classes=CLASSES)
-        loss_softmax = unet.loss(logits, label, weight, CLASSES)
-        loss_angle = unet.angle_loss(angle_pred, angle_label, weight)
+        loss_softmax = unet.loss(logits, label, weight, CLASSES)   
+        loss_angle = unet.angle_loss(angle_pred, angle_label, weight)  
 
         total_loss = loss_softmax + loss_angle #tf.add_n(losses, name='total_loss')
         return logits, total_loss, last_relu, angle_pred
@@ -75,7 +75,7 @@ class TrainModel:
         self.checkpoint_dir = checkpoint_dir
         cpu, gpu = func.find_devices()
         tf_dev = gpu if gpu != "" else cpu
-
+        
         with tf.Graph().as_default(), tf.device(cpu):
             global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
@@ -92,8 +92,8 @@ class TrainModel:
                                                                  self.placeholder_weight, self.placeholder_angle_label,
                                                                  self.placeholder_prior)
                 self.outputs = (logits, loss, last_relu, angle_pred)
-                update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-                grads = opt.compute_gradients(loss)
+                update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS) #从集合中取出变量
+                grads = opt.compute_gradients(loss)  #计算损失梯度
 
             #grads = self._average_gradients(grads)
             apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
