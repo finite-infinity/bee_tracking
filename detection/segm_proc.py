@@ -59,7 +59,7 @@ def connected_components(m): # due to problems with opencv2
                 regions = mark_region(i1, i2, m, regions, rg_nb)
     return rg_nb+1, regions
 
-#计算主轴：每个区域中点的第一主成分的角度
+#计算区域主轴：每个区域中点的第一主成分的角度（通过区域形状计算的）
 def find_center(regions, rg):
     ys, xs = np.where(regions == rg)  #这里x,y是逆时针转了一下的（默认x轴为pi/2位置）
     sz = len(xs)
@@ -103,7 +103,7 @@ def extract_positions(pred_class, pred_angle):
         if ax != -1:   
             a = find_angle(pred_angle, regions, rg)  #预测角
             cl = find_type(pred_class, regions, rg)  #预测类（未经阈值判断）
-            res.append((x, y, cl, a, ax))
+            res.append((x, y, cl, a, ax))   #中心位置、预测类、预测角、主轴
     return res
 
 
