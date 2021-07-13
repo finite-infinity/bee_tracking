@@ -79,7 +79,7 @@ def create_unet2(num_layers, num_filters, data, is_training, prev=None, dropout_
 #计算加权且经概率化的类loss
 def loss(logits, labels, weight_map, numclasses=3):
     oh_labels = tf.one_hot(indices=tf.cast(labels, tf.uint8), depth=numclasses, name="one_hot") #one_hot label
-    loss_map = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=oh_labels)  #logits转化为概率，再计算交叉熵损失（正好label独热了）
+    loss_map = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=oh_labels)  #logits转化为概率（softmax），再计算交叉熵损失（正好label独热了）
     weighted_loss = tf.multiply(loss_map, weight_map)  #给loss加权
     loss = tf.reduce_mean(weighted_loss, name="weighted_loss")
     #tf.add_to_collection('losses', loss)
