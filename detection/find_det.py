@@ -36,6 +36,7 @@ def read_all_files():
     print("%i files" % len(fls), flush=True)
     return fls
 
+#生成窗口网格坐标
 def generate_offsets_for_frame():
     xs = range(0, func.FR_D, DS)  # FR_D=512图像大小, DS=256（像素窗口大小）
     ys = range(0, func.FR_D, DS)
@@ -124,25 +125,25 @@ class DetectionInference:   #推断
         for batch_i in range(BATCH_SIZE):
             (off_x, off_y) = offs[batch_i]
             if (off_x >= 0) and (off_y >= 0):
-                self.batch_data[batch_i,:,:,0] = img[off_y:(off_y + DS), off_x:(off_x + DS)]  #添加这个窗口
+                self.batch_data[batch_i,:,:,0] = img[off_y:(off_y + DS), off_x:(off_x + DS)]  #添加这个窗口的图
             else:
                 self.batch_data[batch_i, :, :, :] = 0
         res = [(self.placeholder_prior, priors), (self.placeholder_img, self.batch_data)]   #上一张图的权重和本次要预测的图打包
         return dict(res)
 
     
-    # 加载偏移量（真实边界框相对锚框的偏移量）
+    # 加载窗口网格
     def _load_offs_for_run(self, offsets, start_i):
         res = []
         for batch_i in range(BATCH_SIZE):
-            (off_x, off_y) = (-1, -1) if start_i >= len(offsets) else offsets[start_i]  # 把offsets过一遍
+            (off_x, off_y) = (-1, -1) if start_i >= len(offsets) else offsets[start_i]  # 把网格过一遍，超出长度赋（-1，-1）
             res.append((off_x, off_y))
             start_i = start_i + 1   # 开始的序号（把每个batch统合）
         return res, start_i   # 输出[(off_x,off_y),...]
 
 
     def start_workers(self):
-        #创建N_PROC个进程
+        # 创建N_PROC个进程
         self.workers = [multiprocessing.Process(target=save_output_worker) for _ in range(N_PROC)]
         for p in self.workers:
             p.start()
@@ -151,29 +152,30 @@ class DetectionInference:   #推断
         for i in range(N_PROC):
             to_save.put((-1, [], -1))
         for p in self.workers:
-            p.join()  #主进程要等该子进程执行完后才能继续向下执行
+            p.join()  # 主进程要等该子进程执行完后才能继续向下执行
     
-    #outs：(logits, angle_pred)  output_i:第i轮训练
+    # outs：(logits, angle_pred)  output_i:第i轮训练
     def _save_output(self, outs, output_i):
-        log_res = np.argmax(outs[0], axis=3)  #logit残差：取logit_pre通道数最大的？全是3
-        angle_res = outs[1][:, :, :, 0]       #角残差：直接就是angle_pre？
-        res = np.append(np.expand_dims(log_res, axis=1), np.expand_dims(angle_res, axis=1), axis=1)
+        log_res = np.argmax(outs[0], axis=3)  # logit网格：取logit_pre通道数=3的（不明所以）
+        angle_res = outs[1][:, :, :, 0]       # 角网格：直接就是angle_pre？
+        res = np.append(np.expand_dims(log_res, axis=1), np.expand_dims(angle_res, axis=1), axis=1) # 加了一维，就可以区分logit（0）和angel（1）了
         np.save(os.path.join(TMP_DIR, "segm_outputs_%i.npy" % output_i), res)
 
     def run_inference(self, fls, offsets, start_off_i=0):  
         global to_save
         t1 = time.time()
         output_i = 0
-        n_runs = math.ceil(len(offsets) / BATCH_SIZE)  #运行轮数
+        n_runs = math.ceil(len(offsets) / BATCH_SIZE)  # 运行轮数（跑完整张图）
         print("STARTING INFERENCE")
         for i in range(n_runs):
-            run_offs, start_off_i = self._load_offs_for_run(offsets, start_off_i) #得到一批次（off_x, off_y）的列表
-            last_priors = np.zeros((BATCH_SIZE, DS, DS, NUM_FILTERS), dtype=np.float32) #初始化‘UNet最后一层’
+            run_offs, start_off_i = self._load_offs_for_run(offsets, start_off_i) # 得到一批次（off_x, off_y）的列表
+            last_priors = np.zeros((BATCH_SIZE, DS, DS, NUM_FILTERS), dtype=np.float32) # 初始化‘UNet最后一层’
             for cur_fr in range(len(fls)):
-                feed_dict = self._feed_dict(run_offs, cur_fr, last_priors)  #预测新图
-                outs, last_priors = self.sess.run([self.outputs, self.priors], feed_dict=feed_dict) #feed_dict替换place_holder，得到[self.outputs, self.priors]
+                feed_dict = self._feed_dict(run_offs, cur_fr, last_priors)  # 将图分割为窗口
+                # 运行model
+                outs, last_priors = self.sess.run([self.outputs, self.priors], feed_dict=feed_dict) # feed_dict替换place_holder，得到[self.outputs, self.priors]
                 self._save_output(outs, output_i) 
-                to_save.put((output_i, run_offs, cur_fr))
+                to_save.put((output_i, run_offs, cur_fr))  # 存入（off_x,off_y）
                 output_i += 1
 
         print("ALL FINISHED - time: %.3f min" % ((time.time() - t1)/60))
@@ -182,10 +184,10 @@ class DetectionInference:   #推断
 ######## MAIN FUNCTION ##############
 
 def find_detections(checkpoint_dir=os.path.join(CHECKPOINT_DIR, "unet2")):
-    print(DATA_DIR)
+    print(DATA_DIR)  
     if os.path.exists(POS_DIR):
-        shutil.rmtree(POS_DIR)
-    os.mkdir(POS_DIR)
+        shutil.rmtree(POS_DIR) #递归删除文件夹下的所有子文件夹和子文件
+    os.mkdir(POS_DIR)   #存放detection位置的path
     if not os.path.exists(TMP_DIR):
         os.mkdir(TMP_DIR)
 
