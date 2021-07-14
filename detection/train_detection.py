@@ -92,21 +92,22 @@ class TrainModel:
                                                                  self.placeholder_weight, self.placeholder_angle_label,
                                                                  self.placeholder_prior)
                 self.outputs = (logits, loss, last_relu, angle_pred)
-                update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS) #从集合中取出变量
+                update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS) #得到batch_normalize中的moving_mean和moving_var
                 grads = opt.compute_gradients(loss)  #计算损失梯度
 
             #grads = self._average_gradients(grads)
-            apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-            variable_averages = tf.train.ExponentialMovingAverage(func.MOVING_AVERAGE_DECAY, global_step)
+            apply_gradient_op = opt.apply_gradients(grads, global_step=global_step) #使用梯度更新对应的variable
+            variable_averages = tf.train.ExponentialMovingAverage(func.MOVING_AVERAGE_DECAY, global_step)  #滑动平均值
             variables_averages_op = variable_averages.apply(tf.trainable_variables())
-            batchnorm_updates_op = tf.group(*update_ops)
-            self.train_op = tf.group(apply_gradient_op, variables_averages_op, batchnorm_updates_op)
+            batchnorm_updates_op = tf.group(*update_ops)  # 进行批量标准化
+            self.train_op = tf.group(apply_gradient_op, variables_averages_op, batchnorm_updates_op) #pipline：梯度更新参数、平均、得到标准化的移动均值、方差
             self.saver = tf.train.Saver(tf.global_variables())
             self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
             self.checkpoint_dir = checkpoint_dir
             self.acc_file = os.path.join(checkpoint_dir, "accuracy.csv")
             checkpoint = func.find_last_checkpoint(checkpoint_dir)
+            #加载权重
             if checkpoint > 0:
                 print("Restoring checkpoint %i.." % checkpoint, flush=True)
                 self.saver.restore(self.sess, os.path.join(checkpoint_dir, 'model_%06d.ckpt' % checkpoint))
@@ -127,7 +128,7 @@ class TrainModel:
         pred_class = np.argmax(logits, axis=3)
         pred_angle = angle_preds[:, :, :, 0]
 
-        lb = batch_data[:,1,:,:]
+        lb = batch_data[:,1,:,:]  
         angle = batch_data[:,2,:,:]
         is_bg = (lb == 0)
         is_fg = np.logical_not(is_bg)
@@ -142,22 +143,22 @@ class TrainModel:
             angle_err = np.mean(np.abs(pred_angle[is_fg] - angle[is_fg]))
         return np.array([0, loss, bg, fg, fg_err, angle_err])
 
-
+    #生成识别数据（DS*DS）
     def _sample_offsets(self, data):
         res = np.zeros((BATCH_SIZE, data.shape[0], data.shape[1], DS, DS))
-        for i in range(BATCH_SIZE):
+        for i in range(BATCH_SIZE):  #off_x: (0, w-DS)  off_y: (0, h-DS)  fh、fv:0/1  随机选择一块可以截取窗口的位置
             off_x, off_y, fh, fv = randint(0, data.shape[2]-DS), randint(0, data.shape[3]-DS), randint(0, 1), randint(0, 1)
-            if not self.with_augmentation:
+            if not self.with_augmentation:  #不增强数据
                 fh, fv = 0, 0
-            cut_data = np.copy(data[:,:,off_x:(off_x+DS),off_y:(off_y+DS)])
-            if fh:
-                cut_data = flip_h(cut_data)
+            cut_data = np.copy(data[:,:,off_x:(off_x+DS),off_y:(off_y+DS)]) #截取图像窗口区域
+            if fh: #翻转
+                cut_data = flip_h(cut_data)  
             if fv:
                 cut_data = flip_v(cut_data)
             res[i] = cut_data
         return res, np.zeros((BATCH_SIZE, DS, DS, NUM_FILTERS), dtype=np.float32)
 
-
+    
     def _input_batch(self, step, batch_data, last_relus, is_train):
         return {self.placeholder_img: np.resize(batch_data[:,step,0,:,:],(BATCH_SIZE, DS, DS, 1)),
                 self.placeholder_label: batch_data[:,step,1,:,:], self.placeholder_angle_label: batch_data[:,step,2,:,:],
@@ -187,10 +188,10 @@ class TrainModel:
             np.savetxt(f, np.reshape(accuracy_t, (1,-1)), fmt='%.5f', delimiter=',', newline='\n')
         return res_img
 
-
+    #自行加载数据，生成训练用的窗口数据
     def run_train_test_iter(self, itr, plot):
         file = self.input_files[itr % len(self.input_files)]
-        npz = np.load(os.path.join(self.data_path, file))
+        npz = np.load(os.path.join(self.data_path, file))  #此处加载数据
         data = npz['data']
         t1 = time.time()
         train_steps = int(data.shape[0]*self.train_prop)
@@ -200,7 +201,7 @@ class TrainModel:
         for step in range(train_steps):
             _, outs = self.sess.run([self.train_op, self.outputs],
                                     feed_dict=self._input_batch(step, batch_data, last_relus, True))
-            last_relus = outs[2]
+            last_relus = outs[2]  #这里用到层连接
             accuracy_t += self._accuracy(step, outs[1], outs[0], outs[3], batch_data)
 
         accuracy_t = accuracy_t / train_steps
@@ -214,6 +215,7 @@ class TrainModel:
             img = self.run_test(batch_data, train_steps, last_relus, plot)
         return img
 
+#输入model ，开始步，结束步，输出model，结果，开始，结束
 def run_training_on_model(model_obj, start_iter, n_iters, return_img):
     for i in range(start_iter, start_iter + n_iters):
         print("ITERATION: %i" % i, flush=True)
@@ -221,7 +223,7 @@ def run_training_on_model(model_obj, start_iter, n_iters, return_img):
         model_obj.saver.save(model_obj.sess, os.path.join(model_obj.checkpoint_dir, 'model_%06d.ckpt' % i))
     return model_obj, img, start_iter + n_iters
 
-
+#在bee_tracing上训练
 def run_training(data_path=DET_DATA_DIR, checkpoint_dir=os.path.join(CHECKPOINT_DIR, "unet2"),
                  train_prop=0.9, n_iters=10, with_augmentation=True, return_img=False):
     model_obj = TrainModel(data_path, train_prop, with_augmentation)
