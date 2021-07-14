@@ -58,7 +58,7 @@ def save_output_worker():
         res = np.zeros((0, 4))
         for batch_i in range(BATCH_SIZE):
             (off_x, off_y) = offs[batch_i]
-            if (off_x >= 0) and (off_y >= 0):  #这？
+            if (off_x >= 0) and (off_y >= 0):  #截取窗口的起点在图片内
                 # 中心位置、预测类、预测角、主轴
                 prs = segm_proc.extract_positions(output[batch_i, 0, :, :], output[batch_i, 1, :, :]) 
                 res_batch = np.zeros((len(prs), 4))
