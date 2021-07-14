@@ -66,6 +66,7 @@ def create_from_frames(frame_nbs, img_dir, pos_dir, out_dir=paths.DET_DATA_DIR):
     for i, frame_nb in enumerate(frame_nbs):
         print("frame %i.." % frame_nb)
         img = func.read_img(frame_nb, img_dir)
+        #txt名是否需要改？
         pos = np.loadtxt(os.path.join(pos_dir, "%06d.txt" % frame_nb), delimiter=",", dtype=np.int)
         res[i] = generate_segm_labels(img, pos)
     np.savez(os.path.join(out_dir, "%06d.npz" % fl_nb), data=res, det=pos)  #存储res和pos 调用时 file=np.load('.npz')，file['data']=res
