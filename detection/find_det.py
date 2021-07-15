@@ -45,6 +45,7 @@ def generate_offsets_for_frame():
 
 ######## POSTPROCESSING AND SAVING SEGMENTATION RESULTS ############
 
+#保存res的txt
 def save_output_worker():
     output = np.zeros((BATCH_SIZE, 2, DS, DS)) # (shape:(b, 2, 256, 256))
     while True:
@@ -68,12 +69,12 @@ def save_output_worker():
                     a_d = math.degrees(a)
                     ax_d = ax_d + 180 if (segm_proc.angle_diff(a_d, ax_d) > 90) else ax_d
                     res_batch[i, :] = [x, y, cl, ax_d]   
-                res_batch[:, 0] += off_x
-                res_batch[:, 1] += off_y     
+                res_batch[:, 0] += off_x      #x + off_x
+                res_batch[:, 1] += off_y      #y + off_y
                 res = np.append(res, res_batch, axis=0) #像数组一样相加
         print("processed frame %i, %i bees" % (cur_fr, res.shape[0]), flush=True)
         with open(os.path.join(POS_DIR, "%06d.txt" % cur_fr), 'a') as f:
-            np.savetxt(f, res, fmt='%i', delimiter=',', newline='\n')
+            np.savetxt(f, res, fmt='%i', delimiter=',', newline='\n')  #保存POD_DIR 文件名是当前帧数.内容：res（x,y,cl,ax_d）
 
 ############# INFERENCE MODEL #####################
 
