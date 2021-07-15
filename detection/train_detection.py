@@ -195,7 +195,7 @@ class TrainModel:
         data = npz['data']
         t1 = time.time()
         train_steps = int(data.shape[0]*self.train_prop)
-        batch_data, last_relus = self._sample_offsets(data)  #直接用sample函数剪裁data，未用到IMG_DIR
+        batch_data, last_relus = self._sample_offsets(data)  #用sample函数剪裁DET_DATA_DIR中data
 
         accuracy_t = np.zeros((6))
         for step in range(train_steps):
