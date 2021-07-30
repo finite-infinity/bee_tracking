@@ -38,14 +38,14 @@ def generate_segm_labels(img, pos, w=10, r1=7, r2=12):
         x, y, obj_class, a = tuple(pos[i,:])
         obj_class += 1
 
-        if obj_class == 2:
-            a = 2 * math.pi
+        if obj_class == 2:   
+            a = 2 * math.pi     # 细胞蜂没有角度
         else:
             a = math.radians(float(a))
 
-        if obj_class == 1:
+        if obj_class == 1:   # 整蜂
             m = ellipse_around_point(x, y, a, FR_D, r1, r2)  
-        else:
+        else:                # 细胞蜂
             m = ellipse_around_point(x, y, a, FR_D, r1, r1)
 
         mask = (m != 0)
